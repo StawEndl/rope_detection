@@ -50,11 +50,20 @@ def is_inter(xys_small, da2):
             return 1
     return 0
 
-def get_xys_labels_small(path, change_size, x1, y1):
+def get_xys_labels_small(path, name, change_size, x1, y1):
     data = []
     # -------------------------------------------------------------#
     #   对于每一个xml都寻找box
     # -------------------------------------------------------------#
+    if not os.path.exists(path+name):
+        txt = open("D:/paCong/person_dog/labels/"+name[:-3]+"txt", "r")
+        da = txt.readline()
+        while da:
+            d = da.split(" ")
+            label, x, y, w, h = d[0], d[1], d[2], d[3], d[4]
+
+
+    path = path+name
     tree = ET.parse(path)
     # height = int(tree.findtext('./size/height'))
     # width = int(tree.findtext('./size/width'))
@@ -90,12 +99,22 @@ save_path = "D:/paCong/big_small/"
 # save_path_mask = "D:/paCong/mask_big/"
 max_num_small = 8
 
-txt_path = save_path+"2007_val.txt"
-txt_file = open(txt_path, "w")
 
-for index_big_file_name in range(500):#len(fileNames_big)
-    # index_big_file_name = random.randint(0, len(fileNames_big)-1)
-    print(index_big_file_name)
+random_index_big_imgs = []
+random_index_big_img = True
+val = random_index_big_img
+len_data=500 if val else len(fileNames_big)
+
+txt_path = save_path+"2007_"+"val.txt" if val else save_path+"2007_"+"train.txt"
+txt_file = open(txt_path, "w")
+for index_big_file_name in range(len_data):#len(fileNames_big)
+    while random_index_big_img:
+        index_big_file_name = random.randint(0, len(fileNames_big)-1)
+        if index_big_file_name not in random_index_big_imgs:
+            random_index_big_imgs.append(index_big_file_name)
+            break
+    # print("\nindex_big_file_name", index_big_file_name)
+    print("\nindex_big_file_name", index_big_file_name if not random_index_big_img else len(random_index_big_imgs))
     img_big = ""
     try:
         img_big = np.array(Image.open(path_big + fileNames_big[index_big_file_name]))
@@ -110,6 +129,7 @@ for index_big_file_name in range(500):#len(fileNames_big)
     xys_labels_small = []
     got_num = 0
     for num in range(num_small):
+        print("num", num, end="    ")
         # print("max_num")
         # while True:
         #     print("while")
@@ -117,10 +137,11 @@ for index_big_file_name in range(500):#len(fileNames_big)
             # x1 = random.randint(0, w_big)
 
         ind_small_photo = random.randint(0, len(fileNames_sma)-1)
-        img_sma = Image.open(path_sma + fileNames_sma[ind_small_photo])
-
         if not os.path.exists(path_sma_label + fileNames_sma[ind_small_photo][:fileNames_sma[ind_small_photo].find(".")] + ".xml"):
             continue
+        img_sma = Image.open(path_sma + fileNames_sma[ind_small_photo])
+
+
 
         # wrong = 0
         # tree = ET.parse(path_sma_label + fileNames_sma[ind_small_photo][:fileNames_sma[ind_small_photo].find(".")] + ".xml")
@@ -134,12 +155,15 @@ for index_big_file_name in range(500):#len(fileNames_big)
         # print(img_sma.size)
         time = 0
         change_size = 1
+        print("time:   ", end="")
         while True:
-            # print(time)
-            if time == 20:
+            print(time, end="    ")
+            if time > 20:
                 break
+            time += 1
             # print("while")
-            change_size = random.randint(25, 400) / 100
+            # change_size = random.randint(25, 400) / 100#增大或者缩小
+            change_size = random.randint(25, 40) / 100  # 缩小
             new_size = (int(img_sma.size[0] * change_size), int(img_sma.size[1] * change_size))
             # img_sma = img_sma.resize((int(img_sma.size[0]*change_size), int(img_sma.size[1]*change_size)))
             # img_sma = np.array(img_sma)
@@ -165,9 +189,8 @@ for index_big_file_name in range(500):#len(fileNames_big)
                 img_sma = np.array(img_sma)
                 break
 
-            time += 1
 
-        if time == 10:
+        if time > 20:
             continue
 
         if is_inter(xys_small, (x1, y1, x2, y2)) == 1:
@@ -175,7 +198,7 @@ for index_big_file_name in range(500):#len(fileNames_big)
         img_sma = cv2.cvtColor(img_sma, cv2.COLOR_RGB2BGR)
 
         light_change = random.randint(1, 37) * 0.1
-        img_sma = exposure.adjust_gamma(img_sma, light_change)
+        # img_sma = exposure.adjust_gamma(img_sma, light_change)
 
         # # print(img_sma.shape)
         # mask_big = np.zeros((1080, 1920, 3))
@@ -205,7 +228,7 @@ for index_big_file_name in range(500):#len(fileNames_big)
         label = 2
         xys_small.append((x1, y1, x2, y2, label))
 
-        xys_labels_small.extend(get_xys_labels_small(path_sma_label + fileNames_sma[ind_small_photo][:fileNames_sma[ind_small_photo].find(".")] + ".xml", change_size, x1, y1))
+        xys_labels_small.extend(get_xys_labels_small(path_sma_label, fileNames_sma[ind_small_photo][:fileNames_sma[ind_small_photo].find(".")] + ".xml", change_size, x1, y1))
         got_num += 1
         # print(xys_labels_small)
         # for (x1, y1, x2, y2, label) in xys_labels_small:
@@ -215,13 +238,20 @@ for index_big_file_name in range(500):#len(fileNames_big)
         #     cv2.rectangle(img_big, (x1, y1), (x2, y2), color, 2, 2)
 
     # print(xys_small)
-    line = path_big + "val_" + fileNames_big[index_big_file_name]
+    line = ""
+    if val:
+        line = path_big +"val_"+ fileNames_big[index_big_file_name]
+    else:
+        line = path_big + fileNames_big[index_big_file_name]
     for (x1, y1, x2, y2, label) in xys_labels_small:
         line += " " + str(x1) + "," + str(y1) + "," + str(x2) + "," + str(y2) + "," + str(label)
     line += "\n"
     txt_file.write(line)
+    if val:
+        cv2.imwrite(save_path +"val_"+ fileNames_big[index_big_file_name], img_big)
+    else:
+        cv2.imwrite(save_path + fileNames_big[index_big_file_name], img_big)
 
-    cv2.imwrite(save_path + "val_" + fileNames_big[index_big_file_name], img_big)
     # cv2.imwrite(save_path_mask +"val_"+ fileNames_big[index_big_file_name], mask_big)
     # cv2.imshow("cat", cv2.resize(img_big, (416, 416)))
     # cv2.waitKey()
