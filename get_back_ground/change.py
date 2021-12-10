@@ -67,9 +67,13 @@ def rename():
 
 def change_small_txt2yolov5_need_txt():
     # img_paths = ["D:/paCong/rope_pet_labeld/", "D:/paCong/new_data_from_video1/"]
+
+
     img_paths = ["D:\paCong\jiankong\jiankong_video_data/3/images/"]
     label_path = "D:\paCong\jiankong\jiankong_video_data/3/labels/"
     new_img_path = "/home/mopanzhong/rope_detection/yolov5-master/data/rope_dog/jiankong_data/3/images/"
+
+
     # txt_path = "./xml2txt/"
     # img_name_txt = open("img_name_txt.txt", "w")
     for img_path in img_paths:
@@ -78,18 +82,30 @@ def change_small_txt2yolov5_need_txt():
         if not os.path.exists(txt_path):
             os.mkdir(txt_path)
         img_names = os.listdir(img_path)
+
+
+
+        #print(img_names)
         for index_img_name, img_name in enumerate(img_names):
             index_point_img_name = img_name.find(".")
-            # print(img_name[index_point_img_name:]!=".jpg")
+            #print(img_name[index_point_img_name:]!=".jpg")
             if (not os.path.isfile(img_path + img_name)) or img_name[index_point_img_name:]!=".jpg":
                 continue
+            #print(new_img_path + img_name)
+
+
 
             img_name_txt.write(new_img_path + img_name+"\n")
             # print(img_path+img_name+"！！！！！！！！！！！")
             img_size = Image.open(img_path+img_name).size
             img_wid = img_size[0]
             img_hig = img_size[1]
-            print(index_img_name, img_path+img_name, label_path+img_name[:index_point_img_name]+".xml")
+
+
+            #print(index_img_name, img_path+img_name, label_path+img_name[:index_point_img_name]+".xml")
+
+
+
             if os.path.exists(label_path+img_name[:index_point_img_name]+".xml"):
                 tree = ET.parse(label_path+img_name[:index_point_img_name]+".xml")
                 txt_file = open(txt_path+img_name[:index_point_img_name]+".txt", "w")
@@ -208,8 +224,32 @@ def get():
 
 
 
+def change_yolov5_txt_lables2yolov5_need_lables():
+    name_txt = open("../person.txt", "r")
+    name = name_txt.readline()
+
+    while name:
+        print(name)
+        txt = open(name.replace(".jpg",".txt").replace("\n",""))
+        data = txt.readline()
+
+        new_txt = open("../new_labels/"+name.split("/")[-1].replace(".jpg", ".txt").replace("\n",""), "w")
+
+        while data:
+            new_txt.write(data.replace("2 ","1 "))
+            data = txt.readline()
+
+        txt.close()
+        new_txt.close()
+
+
+        name = name_txt.readline()
+
+    name_txt.close()
+
 if __name__ == '__main__':
-    change_big_txt2yolov5_need_txt()
+    change_yolov5_txt_lables2yolov5_need_lables()
+
 
 
 

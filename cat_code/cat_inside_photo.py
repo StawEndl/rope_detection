@@ -89,6 +89,7 @@ def get_xys_labels_small(path, name, change_size, x1, y1):
 path_big = "D:/paCong/background_new/fengjing/"
 fileNames_big = os.listdir(path_big)
 
+
 path_sma = "D:/paCong/rope_pet_labeld/"
 fileNames_sma = os.listdir(path_sma)
 
@@ -96,6 +97,7 @@ path_sma_label = "D:/paCong/label/"
 # path_sma_mask = "D:/paCong/mask/"
 
 save_path = "D:/paCong/big_small/"
+
 # save_path_mask = "D:/paCong/mask_big/"
 max_num_small = 8
 
@@ -103,13 +105,21 @@ max_num_small = 8
 random_index_big_imgs = []
 random_index_big_img = True
 val = random_index_big_img
+
+
+
 len_data=500 if val else len(fileNames_big)
+
+
 
 txt_path = save_path+"2007_"+"val.txt" if val else save_path+"2007_"+"train.txt"
 txt_file = open(txt_path, "w")
 for index_big_file_name in range(len_data):#len(fileNames_big)
     while random_index_big_img:
-        index_big_file_name = random.randint(0, len(fileNames_big)-1)
+
+        index_big_file_name = random.randint(0, len_data-1)
+
+
         if index_big_file_name not in random_index_big_imgs:
             random_index_big_imgs.append(index_big_file_name)
             break
@@ -162,8 +172,12 @@ for index_big_file_name in range(len_data):#len(fileNames_big)
                 break
             time += 1
             # print("while")
+
+
             # change_size = random.randint(25, 400) / 100#增大或者缩小
             change_size = random.randint(25, 40) / 100  # 缩小
+
+
             new_size = (int(img_sma.size[0] * change_size), int(img_sma.size[1] * change_size))
             # img_sma = img_sma.resize((int(img_sma.size[0]*change_size), int(img_sma.size[1]*change_size)))
             # img_sma = np.array(img_sma)
