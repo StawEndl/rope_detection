@@ -253,7 +253,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # print("@@@@@@@@@@@", train_path)
     # Trainloader
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size // WORLD_SIZE, gs, single_cls,
+<<<<<<< HEAD
                                               hyp=hyp, augment=False, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
+=======
+                                              hyp=hyp, augment=True, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
+>>>>>>> 62ca31a5e23cc114313c292f693eb6e0bed7a0ec
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
                                               prefix=colorstr('train: '))
 

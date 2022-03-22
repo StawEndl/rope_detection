@@ -84,6 +84,7 @@ head:
    [-1, 1, Conv, [32, 1, 1]],
    [-1, 1, Conv, [32, 1, 1]],
    [-1, 1, nn.Upsample, [None, 2, 'nearest']],#55
+<<<<<<< HEAD
    [-1, 1, Conv, [16, 1, 1, None, 1, False]],
    [-1, 1, Conv, [16, 1, 1, None, 1, False]],
    [-1, 1, Conv, [16, 1, 1, None, 1, False]],
@@ -91,6 +92,15 @@ head:
    [-1, 1, Conv, [8, 1, 1, None, 1, False]],
    [-1, 1, Conv, [8, 1, 1, None, 1, False]],
    [-1, 1, Conv, [1, 1, 1, None, 1, False]],#62
+=======
+   [-1, 1, Conv, [16, 1, 1]],
+   [-1, 1, Conv, [16, 1, 1]],
+   [-1, 1, Conv, [16, 1, 1]],
+   [-1, 1, nn.Upsample, [None, 2, 'nearest']],#59
+   [-1, 1, Conv, [8, 1, 1]],
+   [-1, 1, Conv, [8, 1, 1]],
+   [-1, 1, Conv, [1, 1, 1]],#62
+>>>>>>> 62ca31a5e23cc114313c292f693eb6e0bed7a0ec
 
 
 

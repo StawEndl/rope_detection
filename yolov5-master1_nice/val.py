@@ -267,7 +267,11 @@ def run(data,
 
             imgs_plot_true = img.clone()
             for i, img_plot_true in enumerate(imgs_plot_true):
+<<<<<<< HEAD
                 img_mask_part = mask_res[i] > 0.4
+=======
+                img_mask_part = mask_res[i] > 0.55
+>>>>>>> 62ca31a5e23cc114313c292f693eb6e0bed7a0ec
                 img_mask_part = img_mask_part.squeeze(0)
                 img_plot_true[0, :, :][img_mask_part] = 1
                 img_plot_true[1, :, :][img_mask_part] = 1
@@ -280,7 +284,11 @@ def run(data,
 
             imgs_plot_true = img.clone()
             for i, img_plot_true in enumerate(imgs_plot_true):
+<<<<<<< HEAD
                 img_mask_part = mask_res[i] > 0.3
+=======
+                img_mask_part = mask_res[i] > 0.6
+>>>>>>> 62ca31a5e23cc114313c292f693eb6e0bed7a0ec
                 img_mask_part = img_mask_part.squeeze(0)
                 img_plot_true[0, :, :][img_mask_part] = 1
                 img_plot_true[1, :, :][img_mask_part] = 1
