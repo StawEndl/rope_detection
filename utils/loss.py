@@ -130,6 +130,16 @@ class ComputeLoss:
         self.BCELoss = nn.BCELoss()
         #self.smooth_l1_loss = nn.smooth_l1_loss()
 
+
+        self.sobel_h = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, bias=False)
+        self.sobel_h.weight.data = torch.tensor([[[[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]]],
+                                                device='cuda:0').half()
+        self.sobel_h.requires_grad_(False)
+        self.sobel_v = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, bias=False)
+        self.sobel_v.weight.data = torch.tensor([[[[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]]]],
+                                                device='cuda:0').half()
+        self.sobel_v.requires_grad_(False)
+
     def mask_iou(self,img_masks, pred_mask):
         '''
         Computes IoU between two masks
@@ -148,6 +158,8 @@ class ComputeLoss:
 
         Union = (pred_mask + img_masks) != 0
         Intersection = (pred_mask * img_masks) != 0
+        # print(Intersection)
+        # print(f"Intersection.sum(){Intersection.sum()},Union.sum(){Union.sum()}")
         res = Intersection.sum() / Union.sum()
         return res
 
@@ -173,7 +185,30 @@ class ComputeLoss:
         #mask_loss = self._smooth_l1_loss(mask_res, img_masks_clone)
         mask_losses = torch.zeros(1, device='cuda:0')+ mask_loss
         return mask_loss,mask_losses
-        
+
+
+    def sobel(self, img):
+        # img = img.float()
+        out_h = self.sobel_h(img)
+        out_v = self.sobel_v(img)
+        # out = abs(out_v)+abs(out_h)
+        out = (out_v**2 + out_h**2)**0.5
+        # cv2.imwrite(f'sobel/out_{str(i)}_img.jpg', out[0].squeeze(0).permute(1, 2, 0).repeat(1, 1, 3).cpu().numpy())
+        # cv2.imwrite(f'sobel/out_{str(i)}_mask.jpg', out[0].squeeze(0).permute(1, 2, 0).repeat(1, 1, 3).cpu().numpy())
+        return out
+
+
+    def Sobel_Loss(self,img_masks, mask_res):
+        # i = random.randint(0,100000)
+        img_masks_clone = torch.mean(img_masks, dim=1, keepdim=True)
+        sobel_img_masks = self.sobel(img_masks_clone)
+        sobel_mask_res = self.sobel(mask_res)
+        # cv2.imwrite(f'sobel/out_{str(i)}_img.jpg', (sobel_img_masks[0]*255.).permute(1, 2, 0).repeat(1, 1, 3).detach().cpu().numpy().astype("int"))
+        # cv2.imwrite(f'sobel/out_{str(i)}_mask.jpg', (sobel_mask_res[0]*255.).permute(1, 2, 0).repeat(1, 1, 3).detach().cpu().numpy().astype("int"))
+        mask_loss = (abs(sobel_img_masks-sobel_mask_res)).mean()
+
+        return mask_loss, torch.zeros(1, device='cuda:0')+ mask_loss
+
         
     def BCEloss_compute(self,img_masks_clone,mask_res):
         #print("mask_res[0].shape@@@@@@@@@", mask_res[0].shape)
@@ -194,7 +229,7 @@ class ComputeLoss:
         mask_losses = torch.zeros(1, device='cuda:0')+ mask_loss
         return mask_loss,mask_losses
 
-    def __call__(self, p, targets, mask_res=None, img_masks=None):  # predictions, targets, model
+    def __call__(self, p, targets, mask_res=None, img_masks=None, epoch=None):  # predictions, targets, model
         device = targets.device
         # print("device", device)
         lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
@@ -263,7 +298,11 @@ class ComputeLoss:
             ious = torch.zeros(1, device='cuda:0')
             iou = self.mask_iou(img_masks, mask_res)
             ious+=iou
-                
+
+            sobel_loss, sobel_losses = self.Sobel_Loss(img_masks, mask_res)
+
+            if epoch is not None and epoch>=100:
+                mask_loss+=sobel_loss
                 
                 
         #     # mask_losses = torch.zeros(len(mask_res), device=device, requires_grad=True)
@@ -304,7 +343,7 @@ class ComputeLoss:
         #     #print(torch.cat((lbox, lobj, lcls)).detach())
         #     #return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls, mask_losses)).detach(), mask_loss.mean()
         # #return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
-            return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls, mask_losses)).detach(), mask_loss, iou
+            return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls, mask_losses, ious, sobel_losses)).detach(), mask_loss
         return (lbox + lobj + lcls) * bs, torch.cat((lbox, lobj, lcls)).detach()
 
 

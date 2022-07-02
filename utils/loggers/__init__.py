@@ -37,9 +37,9 @@ class Loggers():
         #              'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',  # metrics
         #              'val/box_loss', 'val/obj_loss', 'val/cls_loss',  # val loss
         #              'x/lr0','x/lr_mask','x/lr_mask1', 'x/lr1', 'x/lr2', 'x/lr1_mask', 'x/lr2_mask']  # params
-        self.keys = ['train/box_loss', 'train/obj_loss', 'train/cls_loss',  # train loss
+        self.keys = ['train/box_loss', 'train/obj_loss', 'train/cls_loss', 'train/mask_loss', 'train/mask_iou', 'train/soebl_loss',  # train loss
                      'metrics/precision', 'metrics/recall', 'metrics/mAP_0.5', 'metrics/mAP_0.5:0.95',  # metrics
-                     'val/box_loss', 'val/obj_loss', 'val/cls_loss',  # val loss
+                     'val/box_loss', 'val/obj_loss', 'val/cls_loss', 'val/mask_loss', 'val/mask_iou', 'val/soebl_loss',  # val loss
                      'x/lr0', 'x/lr1', 'x/lr2']  # params
         for k in LOGGERS:
             setattr(self, k, None)  # init empty logger dictionary
@@ -115,13 +115,14 @@ class Loggers():
             s = '' if file.exists() else (('%20s,' * n % tuple(['epoch'] + self.keys)).rstrip(',') + '\n')  # add header
             with open(file, 'a') as f:
                 print(n, vals)
-                try:
-                    f.write(s + ('%20.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
-                except:
-                    try:
-                        f.write(s + ('%20.5g,' * (n+1) % tuple([epoch] + vals)).rstrip(',') + '\n')
-                    except:
-                        f.write(s + ('%20.5g,' * (n+2) % tuple([epoch] + vals)).rstrip(',') + '\n')
+                f.write(s + ('%20.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
+                # try:
+                #     f.write(s + ('%20.5g,' * n % tuple([epoch] + vals)).rstrip(',') + '\n')
+                # except:
+                #     try:
+                #         f.write(s + ('%20.5g,' * (n+1) % tuple([epoch] + vals)).rstrip(',') + '\n')
+                #     except:
+                #         f.write(s + ('%20.5g,' * (n+2) % tuple([epoch] + vals)).rstrip(',') + '\n')
         if self.tb:
             for k, v in x.items():
                 self.tb.add_scalar(k, v, epoch)

@@ -47,30 +47,15 @@ head:
 
 
    [-1, 1, nn.Upsample, [None, 2, 'nearest']], # 38 24
-   [-1, 1, Conv, [256, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [256, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [256, 1, 1, None, 1, False]],
    [[-1, 20], 1, Concat, [1]],  # cat backbone P4 #42  28
    [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-   [-1, 1, Conv, [128, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [128, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [128, 1, 1, None, 1, False]],
    [[-1, 17], 1, Concat, [1]],  # cat backbone P3 #47  33
-   [-1, 1, Conv, [64, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [64, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [64, 1, 1, None, 1, False]],
    [-1, 1, nn.Upsample, [None, 2, 'nearest']], #51 37
-   [-1, 1, Conv, [1, 1, 1, None, 1, False]],
-   [37, 1, Conv, [32, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [32, 1, 1, None, 1, False]],
+   [-1, 1, Conv, [512, 1, 1, None, 1, False]],
+   [-1, 1, Conv, [256, 1, 1, None, 1, False]],
    [-1, 1, nn.Upsample, [None, 2, 'nearest']], #55  41
-   [-1, 1, Conv, [1, 1, 1, None, 1, False]],
-   [41, 1, Conv, [16, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [16, 1, 1, None, 1, False]],
+   [-1, 1, Conv, [128, 1, 1, None, 1, False]],
+   [-1, 1, Conv, [32, 1, 1, None, 1, False]],
    [-1, 1, nn.Upsample, [None, 2, 'nearest']], #59  45
-   [-1, 1, Conv, [8, 1, 1, None, 1, False]],
-   [-1, 1, Conv, [8, 1, 1, None, 1, False]],
    [-1, 1, Conv, [1, 1, 1, None, 1, False]], #62  48
-
-
   ]

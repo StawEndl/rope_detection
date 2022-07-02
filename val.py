@@ -157,9 +157,9 @@ def run(data,
     confusion_matrix = ConfusionMatrix(nc=nc)
     names = {k: v for k, v in enumerate(model.names if hasattr(model, 'names') else model.module.names)}
     class_map = coco80_to_coco91_class() if is_coco else list(range(1000))
-    s = ('%20s' + '%11s' * 7) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95', 'mask_loss')
+    s = ('%20s' + '%11s' * 9) % ('Class', 'Images', 'Labels', 'P', 'R', 'mAP@.5', 'mAP@.5:.95', 'mask_loss', 'mask_iou', 'sobel_loss')
     dt, p, r, f1, mp, mr, map50, map = [0.0, 0.0, 0.0], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    loss = torch.zeros(4, device=device)
+    loss = torch.zeros(6, device=device)
     loss_iou = 0.
     jdict, stats, ap, ap_class = [], [], [], []
 
@@ -198,8 +198,8 @@ def run(data,
             # print("train_out@@@@@@",train_out.shape)
             # loss += compute_loss([x.float() for x in train_out], targets)[1]  # box, obj, cls
             loss_mm = compute_loss([x.float() for x in train_out], targets, mask_res=mask_res, img_masks=img_mask)
-            loss += loss_mm[1]  # box, obj, cls, mask_loss
-            loss_iou += loss_mm[-1]
+            loss += loss_mm[1]  # box, obj, cls, mask_loss, iou
+            loss_iou += loss_mm[1][4]
         mask_res = mask_res.sigmoid()
 
 
@@ -321,14 +321,16 @@ def run(data,
         nt = torch.zeros(1)
 
     # Print results
-    pf = '%20s' + '%11i' * 2 + '%11.3g' * 4 + '%10.5f'  # print format
+    print_loss = loss.cpu().numpy()[3:]
+    pf = '%20s' + '%11i' * 2 + '%11.3g' * 4 + '%11.5f'*len(print_loss)  # print format
     # print(loss)
-    print(pf % ('all', seen, nt.sum(), mp, mr, map50, map, loss.cpu().numpy()[-1]))
+    print(pf % ('all', seen, nt.sum(), mp, mr, map50, map, print_loss[0], print_loss[1], print_loss[2]))
+
 
     # Print results per class
     if (verbose or (nc < 50 and not training)) and nc > 1 and len(stats):
         for i, c in enumerate(ap_class):
-            print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i], loss.cpu().numpy()[-1]))
+            print(pf % (names[c], seen, nt[c], p[i], r[i], ap50[i], ap[i], print_loss[0], print_loss[1]))
 
     # Print speeds
     #print(dt,seen)
