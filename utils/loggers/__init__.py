@@ -82,7 +82,7 @@ class Loggers():
                         warnings.simplefilter('ignore')  # suppress jit trace warning
                         # print("imgs[0:1]###############",torch.cat((imgs[0:1],imgs[0:1]),1).shape)
                         #self.tb.add_graph(torch.jit.trace(de_parallel(model), imgs[0:1], strict=False), [])
-                        self.tb.add_graph(torch.jit.trace(de_parallel(model), imgs[0:1], strict=False), [])
+                        # self.tb.add_graph(torch.jit.trace(de_parallel(model), imgs[0:1], strict=False), [])
             if ni < 3:
                 f = self.save_dir / f'train_batch{ni}.jpg'  # filename
                 Thread(target=plot_images, args=(imgs, targets, paths, f), daemon=True).start()

@@ -576,7 +576,8 @@ class LoadImagesAndLabels(Dataset):
                 img, (h0, w0), (h, w), img_mask = load_image(self, index, get_mask=get_mask)
             else:
                 img, (h0, w0), (h, w) = load_image(self, index)
-
+            # cv2.imwrite(f"sobel/read_{self.img_files[index].split('/')[-1]}",img_mask)
+            # cv2.imwrite("sobel/read_img.jpg", img)
             # Letterbox
             shape = self.batch_shapes[self.batch[index]] if self.rect else self.img_size  # final letterboxed shape
             if get_mask:
@@ -584,7 +585,9 @@ class LoadImagesAndLabels(Dataset):
             else:
                 img, ratio, pad = letterbox(img, shape, auto=False, scaleup=self.augment)
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
-
+            # print("sobel/letterbox.jpg??????????????",self.img_files[index])
+            # cv2.imwrite(f"sobel/letterbox_{self.img_files[index].split('/')[-1]}", img_mask)
+            # cv2.imwrite("sobel/letterbox_img.jpg", img)
             labels = self.labels[index].copy()
             if labels.size:  # normalized xywh to pixel xyxy format
                 labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
@@ -605,7 +608,7 @@ class LoadImagesAndLabels(Dataset):
                                                      scale=hyp['scale'],
                                                      shear=hyp['shear'],
                                                      perspective=hyp['perspective'])
-
+            # cv2.imwrite("sobel/augment.jpg", img_mask)
         nl = len(labels)  # number of labels
         if nl:
             labels[:, 1:5] = xyxy2xywhn(labels[:, 1:5], w=img.shape[1], h=img.shape[0], clip=True, eps=1E-3)
@@ -618,7 +621,7 @@ class LoadImagesAndLabels(Dataset):
             else:
                 img, labels = self.albumentations(img, labels)
             nl = len(labels)  # update after albumentations
-
+            # cv2.imwrite("sobel/albumentations.jpg", img_mask)
             # HSV color-space
             augment_hsv(img, hgain=hyp['hsv_h'], sgain=hyp['hsv_s'], vgain=hyp['hsv_v'])
 
@@ -708,7 +711,7 @@ def load_image(self, i, get_mask=None):
             im = np.load(npy)
         else:  # read image
             path = self.img_files[i]
-            #print(path)
+            # print(path)
             im = cv2.imread(path)  # BGR
             if get_mask!=None:
                 im_mask = cv2.imread(path.replace("/images/", "/images/mask_big/"))  # BGR
@@ -750,7 +753,7 @@ def load_mosaic(self, index, get_mask=None):
         if i == 0:  # top left
             img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
             if get_mask:
-                img_mask4 = np.full((s * 2, s * 2, img_mask.shape[2]), 0, dtype=np.uint8)  # base image with 4 tiles
+                img_mask4 = np.full((s * 2, s * 2, img_mask.shape[2]), 255, dtype=np.uint8)  # base image with 4 tiles
             x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
             x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
         elif i == 1:  # top right

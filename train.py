@@ -25,6 +25,7 @@ from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import Adam, SGD, lr_scheduler
 from tqdm import tqdm
+import random
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -259,7 +260,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # print("@@@@@@@@@@@", train_path)
     # Trainloader
     train_loader, dataset = create_dataloader(train_path, imgsz, batch_size // WORLD_SIZE, gs, single_cls,
-                                              hyp=hyp, augment=True, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
+                                              hyp=hyp, augment=False, cache=opt.cache, rect=opt.rect, rank=LOCAL_RANK,
                                               workers=workers, image_weights=opt.image_weights, quad=opt.quad,
                                               prefix=colorstr('train: '))
     # train_loader, dataset = create_dataloader(train_path, imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
@@ -267,15 +268,15 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     #                                    workers=workers, pad=0.5,
     #                                    prefix=colorstr('train: '))
 
-    mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
+    # mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
-    assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
+    # assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
     # Process 0
     if RANK in [-1, 0]:
         
         val_loader = create_dataloader(val_path, imgsz, batch_size // WORLD_SIZE * 2, gs, single_cls,
-                                       hyp=hyp, cache=None if noval else opt.cache, rect=True, rank=-1,
+                                       hyp=hyp, cache=None if noval else opt.cache, augment=False, rect=True, rank=-1,
                                        workers=workers, pad=0.5,
                                        prefix=colorstr('val: '))[0]
         
@@ -286,7 +287,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             # cf = torch.bincount(c.long(), minlength=nc) + 1.  # frequency
             # model._initialize_biases(cf.to(device))
             if plots:
-                plot_labels(labels, names, save_dir)
+                # plot_labels(labels, names, save_dir)
+                pass
 
             # Anchors
             '''
@@ -323,7 +325,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     scaler = amp.GradScaler(enabled=cuda)
     # scaler_mask = amp.GradScaler(enabled=cuda)
     stopper = EarlyStopping(patience=opt.patience)
-    compute_loss = ComputeLoss(model)  # init loss class
+    compute_loss = ComputeLoss(model,device=device)  # init loss class
     LOGGER.info(f'Image sizes {imgsz} train, {imgsz} val\n'
                 f'Using {train_loader.num_workers} dataloader workers\n'
                 f"Logging results to {colorstr('bold', save_dir)}\n"
@@ -331,6 +333,31 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     mask_thre = 0.5
     # upsample = nn.Upsample(size=(640, 640), mode='bilinear', align_corners=True)
     last_epoch = -1
+
+
+    colors_train_id = {
+        0:(128, 64, 128),
+        1:(244, 35, 232),
+    2:(70, 70, 70),
+    3:(102, 102, 156),
+    4:(190, 153, 153),
+    5:(153, 153, 153),
+    6:(250, 170, 30),
+    7:(220, 220, 0),
+    8:(107, 142, 35),
+    9:(152, 251, 152),
+    10:(70, 130, 180),
+    11:(220, 20, 60),
+    12:(255, 0, 0),
+    13:(0, 0, 142),
+    14:(0, 0, 70),
+    15:(0, 60, 100),
+    16:(0, 80, 100),
+    17:(0, 0, 230),
+    18:(119, 11, 32),
+    }
+
+
     print(f"device:{device}")
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
@@ -359,14 +386,16 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         # torch.autograd.set_detect_anomaly(True)
         for i, (imgs, targets, paths, shape_o,
                 img_masks) in pbar:  # batch -------------------------------------------------------------
+            # print(f"???{i}")
             # break
             # print("????????????????",imgs.shape, shape_o)
             _,_,h,w = imgs.shape
             upsample = nn.Upsample(size=(h, w), mode='bilinear', align_corners=True)
             ni = i + nb * epoch  # number integrated batches (since train start)
             imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
-            img_masks = img_masks.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
-            img_masks[img_masks > 0.5] = 1.
+            img_masks = img_masks.to(device, non_blocking=True).float() #/ 255.0  # uint8 to float32, 0-255 to 0.0-1.0
+            # print(img_masks.max())
+            # img_masks[img_masks > 0.5] = 1.
 
             # Warmup
             if ni <= nw:
@@ -399,12 +428,32 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
             # Forward
             with amp.autocast(enabled=cuda):
+                # print("cuda????")
+                # name = random.randint(0,100000)
+                # cv2.imwrite(f"sobel/train_{i}_{name}_img.jpg",(imgs[0]*255).int().permute(1,2,0).cpu().numpy())
                 pred, mask_res = model(imgs, get_mask_res=True)  # forward
+
+                # img_masks11 = img_masks[0,:,:,:].clone()
+                # for index_1111 in range(19):
+                #     colors_train_id1 = colors_train_id.get(index_1111)
+                #     index_11 = img_masks11[0] == index_1111
+                #     img_masks11[0,index_11] = colors_train_id1[2]
+                #     img_masks11[1, index_11] = colors_train_id1[1]
+                #     img_masks11[2, index_11] = colors_train_id1[0]
+                # # img_masks11 = img_masks11.permute(1,2,0)
+                # cv2.imwrite(f"sobel/train_{i}_{name}_mask.jpg",img_masks11.int().permute(1,2,0).cpu().numpy())
+                # print(f"sobel/{i}_{name}_mask.jpg")
+
+
+                # cv2.imwrite(f"{name}_img.jpg", img_masks[0].permute(1, 2, 0).cpu().numpy())
                 # mask_res = mask_res.sigmoid()
+                # _, index = mask_res.max(dim=1)
+                # print(index)
 
-
+                # cv2.imwrite(f"sobel_1/{random.randint(0,10000)}.jpg",imgs[0].permute(1,2,0).cpu().numpy()*255)
                 loss, loss_items, loss_mask = compute_loss(pred, targets.to(device), mask_res=mask_res,
                                                                 img_masks=img_masks, epoch=epoch)  # loss scaled by batch_size
+                # print("loss!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
                 # loss_items[-1] += loss_mask
                 # loss_mask = loss_mask_part
                 # print("3-level loss",loss_mask_part,loss_mask)
@@ -416,7 +465,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                     loss *= 4.
 
             # Backward
-            # print("$" * 20, loss, loss_mask)
+            # print("$" * 20, loss_items, loss_mask)
             scaler.scale(loss_mask).backward()
             # scaler_mask.scale(loss_mask).backward()
 
@@ -450,7 +499,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 # for i, img in enumerate(imgs):
                 #     img[img_masks[i] == 1] = 1
                 #     imgs[i] = img
-                imgs[img_masks==1]=1
+                # imgs[img_masks==1]=1
                 # for iiii,ima in enumerate(imgs):
                 #     print(ima.shape,img_masks[iiii].shape)
                 callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)

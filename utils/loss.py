@@ -12,7 +12,9 @@ from utils.metrics import bbox_iou
 from utils.torch_utils import is_parallel
 import torchvision, cv2
 from torchvision.transforms import Resize
-
+import torch.nn.functional as F
+import random
+from skimage import morphology
 
 def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#issuecomment-598028441
     # return positive, negative label smoothing BCE targets
@@ -94,7 +96,7 @@ class QFocalLoss(nn.Module):
 
 class ComputeLoss:
     # Compute losses
-    def __init__(self, model, autobalance=False):
+    def __init__(self, model, autobalance=False,device='cuda:1'):
         '''
         self.sort_obj_iou = False
         device = next(model.parameters()).device  # get model device
@@ -124,6 +126,7 @@ class ComputeLoss:
         
         # self.binary_cross_entropy_with_logits = nn.functional.binary_cross_entropy_with_logits()
         self.BCEWithLogitsLoss = nn.BCEWithLogitsLoss()
+        self.CrossEntropyLoss = torch.nn.CrossEntropyLoss()
         # self.mask_loss_txt = open("mask_loss.txt", "w")
         # self.BCE_mask = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
         # self.sigmoid = nn.Sigmoid()
@@ -133,12 +136,16 @@ class ComputeLoss:
 
         self.sobel_h = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, bias=False)
         self.sobel_h.weight.data = torch.tensor([[[[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]]],
-                                                device='cuda:0').half()
+                                                device=device).float()
         self.sobel_h.requires_grad_(False)
         self.sobel_v = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=3, bias=False)
         self.sobel_v.weight.data = torch.tensor([[[[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]]]],
-                                                device='cuda:0').half()
+                                                device=device).float()
         self.sobel_v.requires_grad_(False)
+
+        self.device = device
+
+        np.seterr(divide='ignore', invalid='ignore')
 
     def mask_iou(self,img_masks, pred_mask):
         '''
@@ -163,7 +170,88 @@ class ComputeLoss:
         res = Intersection.sum() / Union.sum()
         return res
 
+    def _fast_hist(self, row_label, row_image, n_class):
+        mask = (row_label >= 0) & (row_label < n_class)
+        hist = np.bincount(
+            n_class * row_label[mask].astype(int) +
+            row_image[mask], minlength=n_class ** 2).reshape(n_class, n_class)
+        return hist
+
+
+    def mask_miou(self,img_masks, pred_mask):
+        '''
+        Computes IoU between two masks
+        Input: two 2D array mask
+        '''
+        img_masks = self.resize_img2mask(img_masks, pred_mask.shape).squeeze(1)
+
+        # print("img_masks!!!!!",img_masks.shape, pred_mask.shape)
+        # img_masks = img_masks.mean(dim=1)
+        # img_masks[img_masks > 0.2] = 1.
+        # img_masks[img_masks <= 0.2] = 0.
+
+        # mask = (img_masks != 255)
+        # mask_res = mask_res[mask]
+        # img_masks = img_masks[mask]
+
+        _, index = pred_mask.max(dim=1)
+        # print(index)
+        index = index.cpu().numpy()
+        label = img_masks.cpu().numpy()
+        num_classes = pred_mask.shape[1]
+        # print(num_classes)
+        hist = np.zeros((num_classes, num_classes))
+
+        for single_image, single_label in zip(index, label):
+            for row_image, row_label in zip(single_image, single_label):
+                hist += self._fast_hist(row_label.flatten(), row_image.flatten(), num_classes)
+        # print(hist)
+        miou = (hist.sum(axis=1) + hist.sum(axis=0) - np.diag(hist))
+        miou = np.nanmean(np.diag(hist)/miou)
+
+        # miou = (hist.sum(axis=1) + hist.sum(axis=0) - np.diag(hist))
+        # print(miou)
+        # miou = np.nanmean(np.diag(hist) / miou)
+
+        # miou = (np.diag(hist) / )#.mean()
+        # miou = np.nanmean(miou)
+
+        # print(miou,type(miou),miou.shape,miou.mean())
+
+        return miou
+
+    def iou_mean(self, pred, target):
+        # n_classes ：the number of classes in your dataset,not including background
+        # for mask and ground-truth label, not probability map
+        n_classes = pred.shape[1]
+        _, pred = pred.max(dim=1,keepdim=True)
+        ious = []
+        # iousSum = 0.
+        # pred = torch.from_numpy(pred)
+        # pred = pred.view(-1)
+        # target = np.array(target)
+        # target = torch.from_numpy(target)
+        # target = target.view(-1)
+
+
+        # Ignore IoU for background class ("0")
+        for cls in range(n_classes):  # This goes from 1:n_classes-1 -> class "0" is ignored
+            pred_inds = pred == cls
+            target_inds = target == cls
+            intersection = (pred_inds[target_inds]).long().sum().data.cpu().item()  # Cast to long to prevent overflows
+            union = pred_inds.long().sum().data.cpu().item() + target_inds.long().sum().data.cpu().item() - intersection
+            if union == 0:
+                # ious.append(float('nan'))  # If there is no ground truth, do not include in evaluation
+                continue
+            else:
+                ious.append(float(intersection) / float(max(union, 1)))
+                # iousSum += float(intersection) / float(max(union, 1))
+        # print(ious)
+        # return iousSum / n_classes
+        return sum(ious)/len(ious)
+
     def resize_img2mask(self,img_masks,shape):
+        # print(shape,img_masks.shape)
         _,_,h,w = shape
         return torch.nn.functional.interpolate(img_masks, (h,w), mode='bilinear', align_corners=False)
 
@@ -178,12 +266,12 @@ class ComputeLoss:
         
         #print("img_masks!!!!!",img_masks_clone.shape, mask_res.shape)
         img_masks_clone = img_masks_clone.mean(dim=1, keepdim=True)
-        img_masks_clone[img_masks_clone > 0.2] = 1.
-        img_masks_clone[img_masks_clone <= 0.2] = 0.
+        # img_masks_clone[img_masks_clone > 0.2] = 1.
+        # img_masks_clone[img_masks_clone <= 0.2] = 0.
         #print("mask_res, img_masks_clone@#####",len(mask_res),mask_res[0].shape, img_masks_clone.shape)
         mask_loss = nn.functional.smooth_l1_loss(mask_res, img_masks_clone,reduction='mean')
         #mask_loss = self._smooth_l1_loss(mask_res, img_masks_clone)
-        mask_losses = torch.zeros(1, device='cuda:0')+ mask_loss
+        mask_losses = torch.zeros(1, device=self.device)+ mask_loss
         return mask_loss,mask_losses
 
 
@@ -200,17 +288,69 @@ class ComputeLoss:
 
     def Sobel_Loss(self,img_masks, mask_res):
         # i = random.randint(0,100000)
-        img_masks_clone = torch.mean(img_masks, dim=1, keepdim=True)
-        sobel_img_masks = self.sobel(img_masks_clone)
+        # img_masks_clone = torch.mean(img_masks, dim=1, keepdim=True)
+        # img_masks = img_masks.unsqueeze(1)
+        # mask_loss = 0.
+        # print("?>>>>>",img_masks)
+        # morphology.remove_small_objects(data, min_size=300, connectivity=1)
+        sobel_img_masks = self.sobel(img_masks)
+
+        # name = random.randint(0,100000)
+        # cv2.imwrite(f"sobel/{name}_{clas}_img.jpg",img_masks[0].permute(1,2,0).repeat((1,1,3)).cpu().numpy())
+        # cv2.imwrite(f"sobel/{name}_{clas}_sobel.jpg", sobel_img_masks[0].permute(1, 2, 0).repeat((1, 1, 3)).cpu().numpy())
+
+        # inp = mask_res.max(dim=1, keepdim=True)[1].float()
+        # print("::::::",mask_res)
         sobel_mask_res = self.sobel(mask_res)
         # cv2.imwrite(f'sobel/out_{str(i)}_img.jpg', (sobel_img_masks[0]*255.).permute(1, 2, 0).repeat(1, 1, 3).detach().cpu().numpy().astype("int"))
         # cv2.imwrite(f'sobel/out_{str(i)}_mask.jpg', (sobel_mask_res[0]*255.).permute(1, 2, 0).repeat(1, 1, 3).detach().cpu().numpy().astype("int"))
-        mask_loss = (abs(sobel_img_masks-sobel_mask_res)).mean()
+        # print(sobel_img_masks.unique() , sobel_mask_res.unique(),sobel_img_masks-sobel_mask_res)
+        mask_loss = (abs(sobel_img_masks-sobel_mask_res)).mean()#.mean()
 
-        return mask_loss, torch.zeros(1, device='cuda:0')+ mask_loss
+        return mask_loss #, torch.zeros(1, device=self.device)+ mask_loss
+
+
+    def remove_small_objects(self, target, min_size=30, connectivity=1):
+        masks = []
+        for i in range(target.shape[0]):
+            mask = target[i,0,:,:]
+
+            mask = morphology.remove_small_objects(mask.cpu().numpy(), min_size=min_size, connectivity=connectivity)
+            masks.append(torch.from_numpy(mask).unsqueeze(0).unsqueeze(0))
+
+        return torch.cat(masks,0)
+
+
+
+    def Sobel_Loss_multi(self, img_masks, mask_res):
+        loss = []
+        # name = random.randint(0, 100000)
+        # cv2.imwrite(f"sobel/{name}_image.jpg", img_masks[0].permute(1, 2, 0).repeat((1, 1, 3)).cpu().numpy())
+        for i in range(mask_res.shape[1]):
+            img_masks1 = img_masks.clone()
+            mask_res1 = mask_res.max(dim=1, keepdim=True)[1]
+
+            target = img_masks1 == i
+            # target = morphology.remove_small_objects(target.cpu().numpy(), min_size=30, connectivity=1)
+            # target = self.remove_small_objects(target)
+            img_masks1[target] = 255
+
+            img_masks1[~target] = 0
+            # img_masks1 += 1
+
+            mask_res1[mask_res1 != i] = -1
+            mask_res1[mask_res1 == i] = 254
+            mask_res1 += 1
+            # print(img_masks.unique(),"??????",img_masks1.unique())
+            # print(mask_res.shape, "!!!!!!!", mask_res1.shape)
+            loss.append(self.Sobel_Loss(img_masks1.float(), mask_res1.float()))
+        # print(loss)
+        loss = (sum(loss)/len(loss))
+
+        return loss, torch.zeros(1, device=self.device) + loss
 
         
-    def BCEloss_compute(self,img_masks_clone,mask_res):
+    def CEloss_compute(self,img_masks_clone,mask_res):
         #print("mask_res[0].shape@@@@@@@@@", mask_res[0].shape)
         #w = mask_res[0].shape[-1]
         #img_masks_clone = img_masks[0].resize_(1,1,w,w)
@@ -218,21 +358,24 @@ class ComputeLoss:
         #for i in range(1,len(img_masks)):
         #    img_masks_clone = torch.cat((img_masks_clone,img_masks[i].resize_(1,1,w,w)),0)
 
-        img_masks_clone = self.resize_img2mask(img_masks_clone, mask_res.shape)
+        # img_masks_clone = img_masks_clone.unsqueeze(1)
+        # print(f"1111,{img_masks_clone.shape}")
+        img_masks_clone = self.resize_img2mask(img_masks_clone, mask_res.shape).squeeze(1)
+        # print(f"2222,{img_masks_clone.shape}")
         
         #print("img_masks!!!!!",img_masks_clone.shape, mask_res.shape)
-        img_masks_clone = torch.mean(img_masks_clone,dim=1, keepdim=True)
-        img_masks_clone[img_masks_clone > 0.2] = 1.
-        img_masks_clone[img_masks_clone <= 0.2] = 0.
+        # img_masks_clone = torch.mean(img_masks_clone,dim=1).long()
+        # img_masks_clone[img_masks_clone > 0.2] = 1.
+        # img_masks_clone[img_masks_clone <= 0.2] = 0.
         #print("@@@@@@@",img_masks_clone.shape, mask_res.shape)
-        mask_loss = self.BCEWithLogitsLoss(mask_res, img_masks_clone)
-        mask_losses = torch.zeros(1, device='cuda:0')+ mask_loss
+        mask_loss = F.cross_entropy(mask_res.float(), img_masks_clone.long(), ignore_index=255)
+        mask_losses = torch.zeros(1, device=self.device)+ mask_loss
         return mask_loss,mask_losses
 
     def __call__(self, p, targets, mask_res=None, img_masks=None, epoch=None):  # predictions, targets, model
         device = targets.device
         # print("device", device)
-        lcls, lbox, lobj = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
+        lcls, lbox, lobj = torch.zeros(1, device=self.device), torch.zeros(1, device=self.device), torch.zeros(1, device=self.device)
         '''
         tcls, tbox, indices, anchors = self.build_targets(p, targets)  # targets
         
@@ -293,17 +436,44 @@ class ComputeLoss:
             mask_loss = self.BCEWithLogitsLoss(mask_res, img_masks)
             mask_losses = torch.zeros(1, device=device)+ mask_loss
             """
-            mask_loss,mask_losses = self.BCEloss_compute(img_masks,mask_res)
+
+            img_masks = img_masks.mean(dim=1,keepdim=True)
+
+            mask = (img_masks<0) | (img_masks>=mask_res.shape[1])
+            # img_masks[mask] = 0
+
+            img_masks[mask] = 255
+            # img_masks = img_masks - 1
+            # img_masks[img_masks == 254] = 255
+            # mask = img_masks.mean(dim=1,keepdim=True) == 254
+            # img_masks[mask.repeat(1,img_masks.shape[1],1,1)] = 0
+            # mask_res[mask.repeat(1,mask_res.shape[1],1,1)] = 0
+
+            # mask = (img_masks != 255)
+            # mask_res = mask_res[mask]
+            # img_masks = img_masks[mask]
+
+            # print(img_masks.unique(),img_masks.max(),mask_res.shape)
+            mask_loss,mask_losses = self.CEloss_compute(img_masks,mask_res)
             # mask_loss,mask_losses = self.smoothL1_compute(img_masks, mask_res)
-            ious = torch.zeros(1, device='cuda:0')
-            iou = self.mask_iou(img_masks, mask_res)
+            ious = torch.zeros(1, device=self.device)
+            # print(img_masks.shape,mask_res.shape)
+            # iou = self.mask_iou(img_masks, mask_res)
+
+            iou = self.mask_miou(img_masks, mask_res)
+            # iou = self.iou_mean(mask_res, img_masks)
             ious+=iou
 
-            sobel_loss, sobel_losses = self.Sobel_Loss(img_masks, mask_res)
+            # print("mask_loss",iou)
+            # print("miou",self.iou_mean(mask_res, img_masks))
+
+            sobel_loss, sobel_losses = self.Sobel_Loss_multi(img_masks, mask_res)
+
+
 
             if epoch is not None and epoch>=100:
                 mask_loss+=sobel_loss
-                
+
                 
         #     # mask_losses = torch.zeros(len(mask_res), device=device, requires_grad=True)
         #     mask_losses = []

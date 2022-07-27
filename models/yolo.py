@@ -295,8 +295,10 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                  BottleneckCSP, C3, C3TR, C3SPP, C3Ghost]:
             c1, c2 = ch[f], args[0]
             #print("OOOOOOOOOOOOOOOOOOO", i, c2,args[0]<8, len_layers-2)
-            if args[0]<8:
-                c2=args[0]
+            # if args[0]<8:
+            #     c2=args[0]
+            if i == len_layers-1:
+                c2 = args[0]
             elif c2 != no:  # if not output
                 c2 = make_divisible(c2 * gw, 8)
             

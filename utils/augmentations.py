@@ -128,10 +128,10 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleF
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     #print(im.shape)
-    im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
-    #print(im.shape)
+    # im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+    # #print(im.shape)
     if im_mask is not None:
-        im_mask = cv2.copyMakeBorder(im_mask, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(0,0,0))  # add border
+    #     im_mask = cv2.copyMakeBorder(im_mask, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(255,255,255))  # add border
 
         return im, ratio, (dw, dh), im_mask
     return im, ratio, (dw, dh)
@@ -179,11 +179,11 @@ def random_perspective(im, targets=(), segments=(), degrees=10, translate=.1, sc
         if perspective:
             im = cv2.warpPerspective(im, M, dsize=(width, height), borderValue=(114, 114, 114))
             if im_mask is not None:
-                im_mask = cv2.warpPerspective(im_mask, M, dsize=(width, height), borderValue=(0, 0, 0))
+                im_mask = cv2.warpPerspective(im_mask, M, dsize=(width, height), borderValue=(255, 255, 255))
         else:  # affine
             im = cv2.warpAffine(im, M[:2], dsize=(width, height), borderValue=(114, 114, 114))
             if im_mask is not None:
-                im_mask = cv2.warpAffine(im_mask, M[:2], dsize=(width, height), borderValue=(0, 0, 0))
+                im_mask = cv2.warpAffine(im_mask, M[:2], dsize=(width, height), borderValue=(255, 255, 255))
 
     # Visualize
     # import matplotlib.pyplot as plt

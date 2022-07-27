@@ -17,6 +17,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 import cv2
+import random
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -79,6 +80,44 @@ def process_batch(detections, labels, iouv):
         matches = torch.Tensor(matches).to(iouv.device)
         correct[matches[:, 1].long()] = matches[:, 2:3] >= iouv
     return correct
+
+colors_msak = {0:(128, 64,128),
+    1:(244, 35,232),
+    2:( 70, 70, 70),
+    3:(102,102,156),
+    4:(190,153,153),
+    5:(153,153,153),
+    6:(250,170, 30),
+    7:(220,220,  0),
+    8:(107,142, 35),
+    9:(152,251,152),
+    10:( 70,130,180),
+    11:(220, 20, 60),
+    12:(255,  0,  0),
+    13:(  0,  0,142),
+    14:(  0,  0, 70),
+    15:(  0, 60,100),
+    16:(  0, 80,100),
+    17:(  0,  0,230),
+    18:(119, 11, 32),
+    255:(0,0,0)}
+def get_class_mask(mask,cor,color):
+
+    for i in range(len(cor[0])):
+        mask[cor[0][i], 0, cor[2][i], cor[3][i]] = color[0]
+        mask[cor[0][i], 1, cor[2][i], cor[3][i]] = color[1]
+        mask[cor[0][i], 2, cor[2][i], cor[3][i]] = color[2]
+    return mask
+
+
+def get_classes_mask(imgs_plot_true,mask_res):
+    mask = torch.zeros(imgs_plot_true.shape)
+    for clas in range(mask_res.max()+1):
+        cor = torch.where(mask_res==clas)
+        mask = get_class_mask(mask,cor,colors_msak.get(clas))
+
+    imgs_plot_true = 0.7 * imgs_plot_true + 0.3 * mask
+    return imgs_plot_true
 
 
 @torch.no_grad()
@@ -164,6 +203,30 @@ def run(data,
     jdict, stats, ap, ap_class = [], [], [], []
 
     mask_thre = 0.5
+    batch_i_n = 0
+
+    colors_train_id = {
+        0:(128, 64, 128),
+        1:(244, 35, 232),
+    2:(70, 70, 70),
+    3:(102, 102, 156),
+    4:(190, 153, 153),
+    5:(153, 153, 153),
+    6:(250, 170, 30),
+    7:(220, 220, 0),
+    8:(107, 142, 35),
+    9:(152, 251, 152),
+    10:(70, 130, 180),
+    11:(220, 20, 60),
+    12:(255, 0, 0),
+    13:(0, 0, 142),
+    14:(0, 0, 70),
+    15:(0, 60, 100),
+    16:(0, 80, 100),
+    17:(0, 0, 230),
+    18:(119, 11, 32),
+    }
+
 
     for batch_i, (img, targets, paths, shapes, img_mask) in enumerate(tqdm(dataloader, desc=s)):
         #print(img.shape,shapes)
@@ -173,8 +236,8 @@ def run(data,
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         img_mask = img_mask.to(device, non_blocking=True)
         img_mask = img_mask.half() if half else img_mask.float()  # uint8 to fp16/32
-        img_mask /= 255.0  # 0 - 255 to 0.0 - 1.0
-        img_mask[img_mask > 0.5] = 1.
+        # img_mask /= 255.0  # 0 - 255 to 0.0 - 1.0
+        # img_mask[img_mask > 0.5] = 1.
 
         targets = targets.to(device)
         nb, _, height, width = img.shape  # batch size, channels, height, width
@@ -186,6 +249,22 @@ def run(data,
         # out, train_out = model(img, augment=augment)  # inference and training outputs
         # print(img.shape,img.repeat(1,2,1,1).shape)
         _, mask_res = model(img, augment=augment, get_mask_res=True)  # inference and training outputs
+
+        # name = random.randint(0,100000)
+        # cv2.imwrite(f"sobel/val_{batch_i}_{name}_img.jpg",(img[0]*255).int().permute(1,2,0).cpu().numpy())
+        #
+        # img_masks11 = img_mask[0,:,:,:].clone()
+        # for index_1111 in range(19):
+        #     colors_train_id1 = colors_train_id.get(index_1111)
+        #     index_11 = img_masks11[0] == index_1111
+        #     img_masks11[0,index_11] = colors_train_id1[2]
+        #     img_masks11[1, index_11] = colors_train_id1[1]
+        #     img_masks11[2, index_11] = colors_train_id1[0]
+        # # img_masks11 = img_masks11.permute(1,2,0)
+        # cv2.imwrite(f"sobel/val_{batch_i}_{name}_mask.jpg",img_masks11.int().permute(1,2,0).cpu().numpy())
+        # print(f"sobel/{batch_i}_{name}_mask.jpg")
+
+
         # mask_res = mask_res.sigmoid()
         out, train_out = [],[]
         # print("out########################", out.shape)
@@ -200,7 +279,10 @@ def run(data,
             loss_mm = compute_loss([x.float() for x in train_out], targets, mask_res=mask_res, img_masks=img_mask)
             loss += loss_mm[1]  # box, obj, cls, mask_loss, iou
             loss_iou += loss_mm[1][4]
-        mask_res = mask_res.sigmoid()
+            batch_i_n+=1
+        # mask_res = mask_res.sigmoid()
+        _, mask_res = mask_res.max(dim=1)
+        # mask_res = mask_res/255.
 
 
         # Run NMS
@@ -276,39 +358,46 @@ def run(data,
             #     img_plot_true[1, :, :][img_mask_part] = 1
             #     img_plot_true[2, :, :][img_mask_part] = 1
             #     imgs_plot_true[i] = img_plot_true
-            imgs_plot_true[(mask_res > 0.5).repeat(1,3,1,1)] = 1
+            # imgs_plot_true[(mask_res > 0.5).repeat(1,3,1,1)] = 1
+
+            # for clas_plot in range(mask_res.max()+1):
+            #     cor = torch.where(mask_res==clas)
+            imgs_plot_true = get_classes_mask(imgs_plot_true,mask_res)
+
+
+
             f = save_dir / f'val_batch{batch_i}_pred_0.5.jpg'  # predictions
             # print("%%%%%%out",out)
             Thread(target=plot_images, args=(imgs_plot_true, output_to_target(out), paths, f, names),
                    daemon=True).start()
 
-            imgs_plot_true = img.clone()
-            # for i, img_plot_true in enumerate(imgs_plot_true):
-            #     img_mask_part = mask_res[i] > 0.4
-            #     img_mask_part = img_mask_part.squeeze(0)
-            #     img_plot_true[0, :, :][img_mask_part] = 1
-            #     img_plot_true[1, :, :][img_mask_part] = 1
-            #     img_plot_true[2, :, :][img_mask_part] = 1
+            # imgs_plot_true = img.clone()
+            # # for i, img_plot_true in enumerate(imgs_plot_true):
+            # #     img_mask_part = mask_res[i] > 0.4
+            # #     img_mask_part = img_mask_part.squeeze(0)
+            # #     img_plot_true[0, :, :][img_mask_part] = 1
+            # #     img_plot_true[1, :, :][img_mask_part] = 1
+            # #     img_plot_true[2, :, :][img_mask_part] = 1
+            # #
+            # #     imgs_plot_true[i] = img_plot_true
+            # imgs_plot_true[(mask_res > 0.4).repeat(1, 3, 1, 1)] = 1
+            # f = save_dir / f'val_batch{batch_i}_pred_0.4.jpg'  # predictions
+            # Thread(target=plot_images, args=(imgs_plot_true, output_to_target(out), paths, f, names),
+            #        daemon=True).start()
             #
-            #     imgs_plot_true[i] = img_plot_true
-            imgs_plot_true[(mask_res > 0.4).repeat(1, 3, 1, 1)] = 1
-            f = save_dir / f'val_batch{batch_i}_pred_0.4.jpg'  # predictions
-            Thread(target=plot_images, args=(imgs_plot_true, output_to_target(out), paths, f, names),
-                   daemon=True).start()
-
-            imgs_plot_true = img.clone()
-            # for i, img_plot_true in enumerate(imgs_plot_true):
-            #     img_mask_part = mask_res[i] > 0.3
-            #     img_mask_part = img_mask_part.squeeze(0)
-            #     img_plot_true[0, :, :][img_mask_part] = 1
-            #     img_plot_true[1, :, :][img_mask_part] = 1
-            #     img_plot_true[2, :, :][img_mask_part] = 1
-            #
-            #     imgs_plot_true[i] = img_plot_true
-            imgs_plot_true[(mask_res > 0.3).repeat(1, 3, 1, 1)] = 1
-            f = save_dir / f'val_batch{batch_i}_pred_0.3.jpg'  # predictions
-            Thread(target=plot_images, args=(imgs_plot_true, output_to_target(out), paths, f, names),
-                   daemon=True).start()
+            # imgs_plot_true = img.clone()
+            # # for i, img_plot_true in enumerate(imgs_plot_true):
+            # #     img_mask_part = mask_res[i] > 0.3
+            # #     img_mask_part = img_mask_part.squeeze(0)
+            # #     img_plot_true[0, :, :][img_mask_part] = 1
+            # #     img_plot_true[1, :, :][img_mask_part] = 1
+            # #     img_plot_true[2, :, :][img_mask_part] = 1
+            # #
+            # #     imgs_plot_true[i] = img_plot_true
+            # imgs_plot_true[(mask_res > 0.3).repeat(1, 3, 1, 1)] = 1
+            # f = save_dir / f'val_batch{batch_i}_pred_0.3.jpg'  # predictions
+            # Thread(target=plot_images, args=(imgs_plot_true, output_to_target(out), paths, f, names),
+            #        daemon=True).start()
 
     # Compute statistics
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
@@ -320,6 +409,8 @@ def run(data,
     else:
         nt = torch.zeros(1)
 
+    loss = loss/batch_i_n
+    loss_iou = loss_iou / batch_i_n
     # Print results
     print_loss = loss.cpu().numpy()[3:]
     pf = '%20s' + '%11i' * 2 + '%11.3g' * 4 + '%11.5f'*len(print_loss)  # print format
